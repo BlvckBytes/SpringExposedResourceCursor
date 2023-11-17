@@ -1,0 +1,3 @@
+# SpringExposedResourceCursor
+
+This project's aim is to completely take care of standardized resource cursors. It makes use of the [FilterExpressionParser](https://github.com/BlvckBytes/FilterExpressionParser) and maps the `AST` to a tree of `Jetbrains Exposed` operations, to be applied to entity queries later on. It also handles parsing very simple sorting expressions, all while trying to be as user-friendly on the API-side as possible
