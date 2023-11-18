@@ -33,7 +33,7 @@ class SortRequestApplicator(
     for (sortingRequest in (resourceCursor.sorting ?: return)) {
       query.orderBy(
         columnByName[sortingRequest.key]
-          ?: throw UnsupportedPropertyException(sortingRequest.key, displayName),
+          ?: throw UnsupportedPropertyException(sortingRequest.key, listOf(),  displayName),
         when (sortingRequest.value) {
           SortingOrder.ASCENDING -> SortOrder.ASC
           SortingOrder.DESCENDING -> SortOrder.DESC

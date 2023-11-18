@@ -9,9 +9,8 @@ import me.blvckbytes.springexposedresourcecursor.domain.exception.UnsupportedPro
 import org.jetbrains.exposed.sql.*
 
 class FilterRequestApplicator(
-  table: Table,
   private val displayName: String,
-  vararg hiddenColumns: Column<*>
+  accessibleColumns: List<UserAccessibleColumn>
 ) {
 
   private val columnByName: Map<String, Column<*>>
@@ -19,20 +18,19 @@ class FilterRequestApplicator(
   init {
     val columns = mutableMapOf<String, Column<*>>()
 
-    for (column in table.columns) {
-      if (hiddenColumns.contains(column))
-        continue
-
-      columns[column.name] = column
-    }
+    for (accessibleColumn in accessibleColumns)
+      columns[accessibleColumn.makeKey()] = accessibleColumn.column
 
     columnByName = columns
   }
 
-  fun apply(resourceCursor: RequestResourceCursor, query: Query) {
+  fun apply(resourceCursor: RequestResourceCursor, query: Query): Query {
     val expression = resourceCursor.filtering
+
     if (expression != null)
       query.andWhere { filterExpressionToOperator(expression) }
+
+    return query
   }
 
   private fun terminalExpressionToExposedExpression(column: Column<*>, terminal: TerminalExpression<*>): Expression<*>? {
@@ -52,7 +50,7 @@ class FilterRequestApplicator(
   }
 
   private fun resolveColumn(name: String): Column<*> {
-    return columnByName[name] ?: throw UnsupportedPropertyException(name, displayName)
+    return columnByName[name] ?: throw UnsupportedPropertyException(name, columnByName.keys, displayName)
   }
 
   private fun instantiateOperator(column: Column<*>, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
