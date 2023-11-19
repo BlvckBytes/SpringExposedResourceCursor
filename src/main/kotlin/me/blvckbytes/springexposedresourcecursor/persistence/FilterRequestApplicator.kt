@@ -6,6 +6,7 @@ import me.blvckbytes.filterexpressionparser.parser.expression.*
 import me.blvckbytes.springcommon.exception.DescribedInternalException
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
 import me.blvckbytes.springexposedresourcecursor.domain.exception.PropertyDataTypeMismatchException
+import me.blvckbytes.springexposedresourcecursor.domain.exception.UnsupportedOperatorException
 import me.blvckbytes.springexposedresourcecursor.domain.exception.UnsupportedPropertyException
 import org.jetbrains.exposed.sql.*
 
@@ -40,21 +41,20 @@ class FilterRequestApplicator(
         if (accessibleColumn.dataType != ExpressionDataType.DOUBLE)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.DOUBLE, accessibleColumn.dataType)
 
-        doubleParam(terminal.value)
+        accessibleColumn.valueToExpression(terminal.value)
       }
       is LongExpression -> {
         // TODO: (Idea) When a long is provided on a string column, it could be automatically compared with the column's length
         if (accessibleColumn.dataType != ExpressionDataType.LONG)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.LONG, accessibleColumn.dataType)
 
-        longParam(terminal.value)
+        accessibleColumn.valueToExpression(terminal.value)
       }
       is StringExpression -> {
-        // TODO: If the column is of type UUID, Character, Blob or Binary, a value transformation should occur beforehand
         if (accessibleColumn.dataType != ExpressionDataType.STRING)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.STRING, accessibleColumn.dataType)
 
-        stringParam(terminal.value)
+        accessibleColumn.valueToExpression(terminal.value)
       }
       is LiteralExpression -> when (terminal.value!!) {
         LiteralType.NULL -> null
@@ -62,7 +62,7 @@ class FilterRequestApplicator(
           if (accessibleColumn.dataType != ExpressionDataType.BOOLEAN)
             throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.BOOLEAN, accessibleColumn.dataType)
 
-          booleanParam(terminal.value == LiteralType.TRUE)
+          accessibleColumn.valueToExpression(terminal.value == LiteralType.TRUE)
         }
       }
       is IdentifierExpression -> resolveColumn(terminal.value).column
@@ -75,7 +75,17 @@ class FilterRequestApplicator(
   }
 
   private fun instantiateOperator(accessibleColumn: UserAccessibleColumn, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
-    val value = terminalExpressionToExposedExpression(accessibleColumn, terminalValue) ?: return IsNullOp(accessibleColumn.column)
+    val value = terminalExpressionToExposedExpression(accessibleColumn, terminalValue)
+
+    if (value == null) {
+      if (operator == ComparisonOperator.EQUAL)
+        return IsNullOp(accessibleColumn.column)
+
+      if (operator == ComparisonOperator.NOT_EQUAL)
+        return IsNotNullOp(accessibleColumn.column)
+
+      throw UnsupportedOperatorException(null, operator, listOf(ComparisonOperator.EQUAL, ComparisonOperator.NOT_EQUAL))
+    }
 
     return when (operator) {
       ComparisonOperator.EQUAL -> EqOp(accessibleColumn.column, value)

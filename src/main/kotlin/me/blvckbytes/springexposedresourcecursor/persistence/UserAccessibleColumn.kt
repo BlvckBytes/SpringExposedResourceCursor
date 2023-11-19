@@ -1,9 +1,12 @@
 package me.blvckbytes.springexposedresourcecursor.persistence
 
+import me.blvckbytes.springexposedresourcecursor.domain.exception.InvalidUUIDException
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
+import java.util.*
+import kotlin.reflect.KClass
 
 class UserAccessibleColumn(
   val column: Column<*>,
@@ -12,9 +15,16 @@ class UserAccessibleColumn(
   private val parent: UserAccessibleColumn?
 ) {
 
-  val dataType: ExpressionDataType = decideDataType(column)
-
+  val dataType: ExpressionDataType
   val key = makeKey()
+
+  val valueToExpression: (value: Any) -> Expression<*>
+
+  init {
+    val result = decideDataTypeAndMapper(column)
+    this.dataType = result.first
+    this.valueToExpression = result.second
+  }
 
   private fun makeKey(): String {
     val columnName = getColumnName()
@@ -81,7 +91,7 @@ class UserAccessibleColumn(
     return String(result.sliceArray(0 until resultSize))
   }
 
-  private fun decideDataType(column: Column<*>): ExpressionDataType {
+  private fun decideDataTypeAndMapper(column: Column<*>): Pair<ExpressionDataType, ((value: Any) -> Expression<*>)> {
     // NOTE: It seems like Exposed has to - for whatever internal reason - access the database
     // when trying to read the Column#columnType property on columns that store the main ID
     // of an entity. A wild guess would be that the actual SQL type (which is stored in many
@@ -93,18 +103,24 @@ class UserAccessibleColumn(
     // To circumvent this, as all tables automatically name their primary ID "id", the data type can
     // be distinguished by the specific IdTable implementation class.
 
+    var identifierColumnType: ColumnType? = null
+
     if (column.name == "id") {
-      when (column.table) {
+      identifierColumnType = when (column.table) {
         is IntIdTable,
-        is LongIdTable -> return ExpressionDataType.DOUBLE
-        is UUIDTable -> return ExpressionDataType.STRING
+        is LongIdTable -> LongColumnType()
+        is UUIDTable -> UUIDColumnType()
+        else -> null
       }
     }
 
-    return when (column.columnType) {
+    return when (val columnType = identifierColumnType ?: column.columnType) {
       is DoubleColumnType,
       is DecimalColumnType,
-      is FloatColumnType -> ExpressionDataType.DOUBLE
+      is FloatColumnType -> Pair(ExpressionDataType.DOUBLE) {
+        ensureCorrectValueType(ExpressionDataType.DOUBLE, it)
+        QueryParameter(it, columnType)
+      }
       is LongColumnType,
       is IntegerColumnType,
       is ByteColumnType,
@@ -112,15 +128,52 @@ class UserAccessibleColumn(
       is ULongColumnType,
       is UIntegerColumnType,
       is UByteColumnType,
-      is UShortColumnType -> ExpressionDataType.LONG
+      is UShortColumnType -> Pair(ExpressionDataType.LONG) {
+        ensureCorrectValueType(ExpressionDataType.LONG, it)
+        QueryParameter(it, columnType)
+      }
+      is UUIDColumnType -> Pair(ExpressionDataType.STRING) {
+        ensureCorrectValueType(ExpressionDataType.STRING, it)
+        QueryParameter(parseUUID(key, it as String), columnType)
+      }
       is StringColumnType,
-      is UUIDColumnType,
-      is CharacterColumnType,
+      is CharacterColumnType -> Pair(ExpressionDataType.STRING) {
+        ensureCorrectValueType(ExpressionDataType.STRING, it)
+        QueryParameter(it, columnType)
+      }
       is BlobColumnType,
-      is BinaryColumnType -> ExpressionDataType.STRING
-      is EntityIDColumnType<*> -> decideDataType((column.columnType as EntityIDColumnType<*>).idColumn)
-      is BooleanColumnType -> ExpressionDataType.BOOLEAN
+      is BinaryColumnType -> Pair(ExpressionDataType.STRING) {
+        ensureCorrectValueType(ExpressionDataType.STRING, it)
+        QueryParameter((it as String).toByteArray(), columnType)
+      }
+      is BooleanColumnType -> Pair(ExpressionDataType.BOOLEAN) {
+        ensureCorrectValueType(ExpressionDataType.BOOLEAN, it)
+        QueryParameter(it, columnType)
+      }
+      is EntityIDColumnType<*> -> decideDataTypeAndMapper((column.columnType as EntityIDColumnType<*>).idColumn)
       else -> throw IllegalStateException("Could not map column type to expression data type: ${column.columnType.javaClass.simpleName}")
+    }
+  }
+
+  private fun ensureCorrectValueType(dataType: ExpressionDataType, value: Any) {
+    val type: KClass<*> = when (dataType) {
+      ExpressionDataType.STRING -> String::class
+      ExpressionDataType.LONG -> Long::class
+      ExpressionDataType.DOUBLE -> Double::class
+      ExpressionDataType.BOOLEAN -> Boolean::class
+    }
+
+    // NOTE: This exception doesn't need to be user-readable, as it should never occur since the
+    // corresponding applicator has to check beforehand and throw a proper type mismatch exception
+    if (!type.isInstance(value))
+      throw IllegalStateException("Required type $dataType but found ${value.javaClass.simpleName}")
+  }
+
+  private fun parseUUID(columnName: String, input: String): UUID {
+    try {
+      return UUID.fromString(input)
+    } catch (exception: IllegalArgumentException) {
+      throw InvalidUUIDException(input, columnName)
     }
   }
 }
