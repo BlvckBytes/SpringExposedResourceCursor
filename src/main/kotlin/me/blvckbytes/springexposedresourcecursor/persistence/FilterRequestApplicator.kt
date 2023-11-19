@@ -125,7 +125,7 @@ class FilterRequestApplicator(
     }
 
     var operand: Expression<*> = accessibleColumn.column
-    val value: Expression<*>?
+    var value: Expression<*>?
 
     // Longs should be able to operate on string columns by accessing their length
     if (
@@ -150,9 +150,21 @@ class FilterRequestApplicator(
       throw UnsupportedOperatorException(null, operator, listOf(ComparisonOperator.EQUAL, ComparisonOperator.NOT_EQUAL))
     }
 
+    @Suppress("UNCHECKED_CAST")
+    if (
+      accessibleColumn.column.columnType is StringColumnType &&
+      terminalValue is StringExpression &&
+      (operator == ComparisonOperator.EQUAL || operator == ComparisonOperator.NOT_EQUAL)
+    ) {
+      operand = Trim(LowerCase(operand as Expression<String>))
+      value = Trim(LowerCase(value as Expression<String>))
+    }
+
     return when (operator) {
-      ComparisonOperator.EQUAL -> EqOp(operand, value)
-      ComparisonOperator.NOT_EQUAL -> NeqOp(operand, value)
+      ComparisonOperator.EQUAL,
+      ComparisonOperator.EQUAL_SENSITIVE -> EqOp(operand, value)
+      ComparisonOperator.NOT_EQUAL,
+      ComparisonOperator.NOT_EQUAL_SENSITIVE -> NeqOp(operand, value)
       ComparisonOperator.GREATER_THAN -> GreaterOp(operand, value)
       ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(operand, value)
       ComparisonOperator.LESS_THAN -> LessOp(operand, value)
