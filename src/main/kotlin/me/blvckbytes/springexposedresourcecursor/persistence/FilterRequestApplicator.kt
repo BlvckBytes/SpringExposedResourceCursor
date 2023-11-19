@@ -5,6 +5,7 @@ import me.blvckbytes.filterexpressionparser.parser.LiteralType
 import me.blvckbytes.filterexpressionparser.parser.expression.*
 import me.blvckbytes.springcommon.exception.DescribedInternalException
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
+import me.blvckbytes.springexposedresourcecursor.domain.exception.PropertyDataTypeMismatchException
 import me.blvckbytes.springexposedresourcecursor.domain.exception.UnsupportedPropertyException
 import org.jetbrains.exposed.sql.*
 
@@ -13,15 +14,15 @@ class FilterRequestApplicator(
   accessibleColumns: List<UserAccessibleColumn>
 ) {
 
-  private val columnByName: Map<String, Column<*>>
+  private val accessibleColumnByName: Map<String, UserAccessibleColumn>
 
   init {
-    val columns = mutableMapOf<String, Column<*>>()
+    val columns = mutableMapOf<String, UserAccessibleColumn>()
 
     for (accessibleColumn in accessibleColumns)
-      columns[accessibleColumn.makeKey()] = accessibleColumn.column
+      columns[accessibleColumn.key] = accessibleColumn
 
-    columnByName = columns
+    accessibleColumnByName = columns
   }
 
   fun apply(resourceCursor: RequestResourceCursor, query: Query): Query {
@@ -33,42 +34,63 @@ class FilterRequestApplicator(
     return query
   }
 
-  private fun terminalExpressionToExposedExpression(column: Column<*>, terminal: TerminalExpression<*>): Expression<*>? {
-    // TODO: Use column.columnType to either transform terminal values to their correct type or throw an error
+  private fun terminalExpressionToExposedExpression(accessibleColumn: UserAccessibleColumn, terminal: TerminalExpression<*>): Expression<*>? {
     return when (terminal) {
-      is DoubleExpression -> doubleParam(terminal.value)
-      is LongExpression -> longParam(terminal.value)
-      is StringExpression -> stringParam(terminal.value)
+      is DoubleExpression -> {
+        if (accessibleColumn.dataType != ExpressionDataType.DOUBLE)
+          throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.DOUBLE, accessibleColumn.dataType)
+
+        doubleParam(terminal.value)
+      }
+      is LongExpression -> {
+        // TODO: (Idea) When a long is provided on a string column, it could be automatically compared with the column's length
+        if (accessibleColumn.dataType != ExpressionDataType.LONG)
+          throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.LONG, accessibleColumn.dataType)
+
+        longParam(terminal.value)
+      }
+      is StringExpression -> {
+        // TODO: If the column is of type UUID, Character, Blob or Binary, a value transformation should occur beforehand
+        if (accessibleColumn.dataType != ExpressionDataType.STRING)
+          throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.STRING, accessibleColumn.dataType)
+
+        stringParam(terminal.value)
+      }
       is LiteralExpression -> when (terminal.value!!) {
         LiteralType.NULL -> null
-        LiteralType.TRUE -> booleanParam(true)
-        LiteralType.FALSE -> booleanParam(false)
+        LiteralType.TRUE, LiteralType.FALSE -> {
+          if (accessibleColumn.dataType != ExpressionDataType.BOOLEAN)
+            throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.BOOLEAN, accessibleColumn.dataType)
+
+          booleanParam(terminal.value == LiteralType.TRUE)
+        }
       }
-      is IdentifierExpression -> resolveColumn(terminal.value)
+      is IdentifierExpression -> resolveColumn(terminal.value).column
       else -> throw DescribedInternalException("Encountered unimplemented filter terminal expression type")
     }
   }
 
-  private fun resolveColumn(name: String): Column<*> {
-    return columnByName[name] ?: throw UnsupportedPropertyException(name, columnByName.keys, displayName)
+  private fun resolveColumn(name: String): UserAccessibleColumn {
+    return accessibleColumnByName[name] ?: throw UnsupportedPropertyException(name, accessibleColumnByName.values, displayName)
   }
 
-  private fun instantiateOperator(column: Column<*>, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
-    val value = terminalExpressionToExposedExpression(column, terminalValue) ?: return IsNullOp(column)
+  private fun instantiateOperator(accessibleColumn: UserAccessibleColumn, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
+    val value = terminalExpressionToExposedExpression(accessibleColumn, terminalValue) ?: return IsNullOp(accessibleColumn.column)
 
     return when (operator) {
-      ComparisonOperator.EQUAL -> EqOp(column, value)
-      ComparisonOperator.NOT_EQUAL -> NeqOp(column, value)
+      ComparisonOperator.EQUAL -> EqOp(accessibleColumn.column, value)
+      ComparisonOperator.NOT_EQUAL -> NeqOp(accessibleColumn.column, value)
       ComparisonOperator.REGEX_MATCHER -> throw DescribedInternalException("The regex operator is not (yet) supported")
       ComparisonOperator.CONTAINS_EXACT -> {
+        // TODO: Implement these missing operations
         throw DescribedInternalException("The contains exact operator is not (yet) supported")
 //        LikeEscapeOp(column, stringParam(""), true, '%')
       }
       ComparisonOperator.CONTAINS_FUZZY -> throw DescribedInternalException("The contains fuzzy operator is not (yet) supported")
-      ComparisonOperator.GREATER_THAN -> GreaterOp(column, value)
-      ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(column, value)
-      ComparisonOperator.LESS_THAN -> LessOp(column, value)
-      ComparisonOperator.LESS_THAN_OR_EQUAL -> LessEqOp(column, value)
+      ComparisonOperator.GREATER_THAN -> GreaterOp(accessibleColumn.column, value)
+      ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(accessibleColumn.column, value)
+      ComparisonOperator.LESS_THAN -> LessOp(accessibleColumn.column, value)
+      ComparisonOperator.LESS_THAN_OR_EQUAL -> LessEqOp(accessibleColumn.column, value)
     }
   }
 

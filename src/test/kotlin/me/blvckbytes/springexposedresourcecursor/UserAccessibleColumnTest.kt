@@ -21,7 +21,7 @@ class UserAccessibleColumnTest {
   }
 
   private fun createSpecificCase(expectedName: String, columnName: String) {
-    val result = UserAccessibleColumn(createFakeColumn(columnName), null, true, null).makeKey()
+    val result = UserAccessibleColumn(createFakeColumn(columnName), null, true, null).key
     assertEquals(expectedName, result)
   }
 
