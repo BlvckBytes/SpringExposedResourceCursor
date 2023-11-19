@@ -86,12 +86,13 @@ class FilterRequestApplicator(
   }
 
   private fun instantiateOperator(accessibleColumn: UserAccessibleColumn, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
-    // These operators all require the SQL LIKE operator
+    // These operators all operate only on string terminal values and string columns
     if (
       operator == ComparisonOperator.CONTAINS ||
       operator == ComparisonOperator.CONTAINS_FUZZY ||
       operator == ComparisonOperator.STARTS_WITH ||
-      operator == ComparisonOperator.ENDS_WITH
+      operator == ComparisonOperator.ENDS_WITH ||
+      operator == ComparisonOperator.REGEX_MATCHER
     ) {
       if (terminalValue !is StringExpression)
         throw DescribedException.fromDescription("The filter operator $operator only works with string values")
@@ -108,6 +109,14 @@ class FilterRequestApplicator(
               true, null
             )
           }
+        )
+        ComparisonOperator.REGEX_MATCHER -> (
+          @Suppress("UNCHECKED_CAST")
+          RegexpOp(
+            accessibleColumn.column as Column<String>,
+            QueryParameter(terminalValue.value, accessibleColumn.column.columnType),
+            true
+          )
         )
         else -> {
           val escapedValue = escapeLikeValue(terminalValue.value)
@@ -127,8 +136,6 @@ class FilterRequestApplicator(
         }
       }
     }
-
-    // TODO: Implement REGEX_MATCHER
 
     var operand: Expression<*> = accessibleColumn.column
     val value: Expression<*>?
@@ -155,8 +162,6 @@ class FilterRequestApplicator(
 
       throw UnsupportedOperatorException(null, operator, listOf(ComparisonOperator.EQUAL, ComparisonOperator.NOT_EQUAL))
     }
-
-    // TODO: Check operators against terminal expression types to catch unlogical comparisons
 
     return when (operator) {
       ComparisonOperator.EQUAL -> EqOp(operand, value)
