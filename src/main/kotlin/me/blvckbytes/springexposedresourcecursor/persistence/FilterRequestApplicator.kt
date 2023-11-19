@@ -44,13 +44,13 @@ class FilterRequestApplicator(
         accessibleColumn.valueToExpression(terminal.value)
       }
       is LongExpression -> {
-        // TODO: (Idea) When a long is provided on a string column, it could be automatically compared with the column's length
         if (accessibleColumn.dataType != ExpressionDataType.LONG)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.LONG, accessibleColumn.dataType)
 
         accessibleColumn.valueToExpression(terminal.value)
       }
       is StringExpression -> {
+        // TODO: (Idea) would it be possible to somehow encode invoking LOWERCASE, UPPERCASE and TRIM?
         if (accessibleColumn.dataType != ExpressionDataType.STRING)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.STRING, accessibleColumn.dataType)
 
@@ -75,21 +75,37 @@ class FilterRequestApplicator(
   }
 
   private fun instantiateOperator(accessibleColumn: UserAccessibleColumn, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
-    val value = terminalExpressionToExposedExpression(accessibleColumn, terminalValue)
+    var operand: Expression<*> = accessibleColumn.column
+    val value: Expression<*>?
+
+    // NOTE: Longs should be able to operate on string columns by accessing their length
+    if (
+      terminalValue is LongExpression &&
+      accessibleColumn.column.columnType is StringColumnType
+    ) {
+      @Suppress("UNCHECKED_CAST")
+      operand = CharLength(accessibleColumn.column as Column<String>)
+      value = QueryParameter(terminalValue.value, LongColumnType())
+    }
+
+    else
+      value = terminalExpressionToExposedExpression(accessibleColumn, terminalValue)
 
     if (value == null) {
       if (operator == ComparisonOperator.EQUAL)
-        return IsNullOp(accessibleColumn.column)
+        return IsNullOp(operand)
 
       if (operator == ComparisonOperator.NOT_EQUAL)
-        return IsNotNullOp(accessibleColumn.column)
+        return IsNotNullOp(operand)
 
       throw UnsupportedOperatorException(null, operator, listOf(ComparisonOperator.EQUAL, ComparisonOperator.NOT_EQUAL))
     }
 
+    // TODO: Check operators against terminal expression types to catch unlogical comparisons
+
     return when (operator) {
-      ComparisonOperator.EQUAL -> EqOp(accessibleColumn.column, value)
-      ComparisonOperator.NOT_EQUAL -> NeqOp(accessibleColumn.column, value)
+      ComparisonOperator.EQUAL -> EqOp(operand, value)
+      ComparisonOperator.NOT_EQUAL -> NeqOp(operand, value)
       ComparisonOperator.REGEX_MATCHER -> throw DescribedInternalException("The regex operator is not (yet) supported")
       ComparisonOperator.CONTAINS_EXACT -> {
         // TODO: Implement these missing operations
@@ -97,10 +113,10 @@ class FilterRequestApplicator(
 //        LikeEscapeOp(column, stringParam(""), true, '%')
       }
       ComparisonOperator.CONTAINS_FUZZY -> throw DescribedInternalException("The contains fuzzy operator is not (yet) supported")
-      ComparisonOperator.GREATER_THAN -> GreaterOp(accessibleColumn.column, value)
-      ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(accessibleColumn.column, value)
-      ComparisonOperator.LESS_THAN -> LessOp(accessibleColumn.column, value)
-      ComparisonOperator.LESS_THAN_OR_EQUAL -> LessEqOp(accessibleColumn.column, value)
+      ComparisonOperator.GREATER_THAN -> GreaterOp(operand, value)
+      ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(operand, value)
+      ComparisonOperator.LESS_THAN -> LessOp(operand, value)
+      ComparisonOperator.LESS_THAN_OR_EQUAL -> LessEqOp(operand, value)
     }
   }
 
