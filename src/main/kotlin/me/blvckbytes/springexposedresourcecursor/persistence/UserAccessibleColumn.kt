@@ -29,18 +29,17 @@ class UserAccessibleColumn(
   }
 
   private fun asciiCamelCaseTransform(input: String): String {
-    // TODO: This logic could most definitely use some test cases...
     val inputLength = input.length
     val result = CharArray(inputLength)
     var resultSize = 0
 
     var upperCaseFlag = false
 
-    for (i in 0..inputLength) {
+    for (i in 0 until inputLength) {
       val currentChar = input[i]
 
       if (currentChar == '_') {
-        upperCaseFlag = true
+        upperCaseFlag = resultSize > 0
         continue
       }
 
@@ -56,7 +55,7 @@ class UserAccessibleColumn(
         }
 
         // a 97 - z 112
-        val isLowerCaseAlphabet = currentChar.code in 97..112
+        val isLowerCaseAlphabet = currentChar.code in 97..122
 
         if (isLowerCaseAlphabet)
           result[resultSize++] = currentChar.minus(32)
@@ -72,6 +71,6 @@ class UserAccessibleColumn(
       result[resultSize++] = currentChar
     }
 
-    return String(result.sliceArray(0..resultSize))
+    return String(result.sliceArray(0 until resultSize))
   }
 }
