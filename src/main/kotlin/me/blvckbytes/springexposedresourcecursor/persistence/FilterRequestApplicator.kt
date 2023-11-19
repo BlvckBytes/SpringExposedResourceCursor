@@ -13,27 +13,14 @@ import org.jetbrains.exposed.sql.*
 
 class FilterRequestApplicator(
   private val displayName: String,
-  accessibleColumns: List<UserAccessibleColumn>
+  private val accessibleColumnByName: Map<String, UserAccessibleColumn>
 ) {
 
-  private val accessibleColumnByName: Map<String, UserAccessibleColumn>
-
-  init {
-    val columns = mutableMapOf<String, UserAccessibleColumn>()
-
-    for (accessibleColumn in accessibleColumns)
-      columns[accessibleColumn.key] = accessibleColumn
-
-    accessibleColumnByName = columns
-  }
-
-  fun apply(resourceCursor: RequestResourceCursor, query: Query): Query {
+  fun apply(resourceCursor: RequestResourceCursor, query: Query) {
     val expression = resourceCursor.filtering
 
     if (expression != null)
       query.andWhere { filterExpressionToOperator(expression) }
-
-    return query
   }
 
   private fun terminalExpressionToExposedExpression(accessibleColumn: UserAccessibleColumn, terminal: TerminalExpression<*>): Expression<*>? {
