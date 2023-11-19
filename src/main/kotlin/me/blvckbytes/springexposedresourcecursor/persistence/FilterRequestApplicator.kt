@@ -3,6 +3,7 @@ package me.blvckbytes.springexposedresourcecursor.persistence
 import me.blvckbytes.filterexpressionparser.parser.ComparisonOperator
 import me.blvckbytes.filterexpressionparser.parser.LiteralType
 import me.blvckbytes.filterexpressionparser.parser.expression.*
+import me.blvckbytes.springcommon.exception.DescribedException
 import me.blvckbytes.springcommon.exception.DescribedInternalException
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
 import me.blvckbytes.springexposedresourcecursor.domain.exception.PropertyDataTypeMismatchException
@@ -74,11 +75,65 @@ class FilterRequestApplicator(
     return accessibleColumnByName[name] ?: throw UnsupportedPropertyException(name, accessibleColumnByName.values, displayName)
   }
 
+  private fun escapeLikeValue(value: String): String {
+    return value
+      // SQL uses C-Style escapes, so single backslashes need to be escaped as well
+      .replace("\\", "\\\\")
+      // The percentage wildcard is used to specify a pattern of zero (0) or more characters
+      .replace("%", "\\%")
+      // The underscore wildcard is used to match exactly one character
+      .replace("_", "\\_")
+  }
+
   private fun instantiateOperator(accessibleColumn: UserAccessibleColumn, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
+    // These operators all require the SQL LIKE operator
+    if (
+      operator == ComparisonOperator.CONTAINS ||
+      operator == ComparisonOperator.CONTAINS_FUZZY ||
+      operator == ComparisonOperator.STARTS_WITH ||
+      operator == ComparisonOperator.ENDS_WITH
+    ) {
+      if (terminalValue !is StringExpression)
+        throw DescribedException.fromDescription("The filter operator $operator only works with string values")
+
+      if (accessibleColumn.column.columnType !is StringColumnType)
+        throw DescribedException.fromDescription("The filter operator $operator only works on string columns")
+
+      return when (operator) {
+        ComparisonOperator.CONTAINS_FUZZY -> AndOp(
+          terminalValue.value.split(" ").map {
+            LikeEscapeOp(
+              accessibleColumn.column,
+              QueryParameter("%${escapeLikeValue(it)}%", accessibleColumn.column.columnType),
+              true, null
+            )
+          }
+        )
+        else -> {
+          val escapedValue = escapeLikeValue(terminalValue.value)
+          LikeEscapeOp(
+            accessibleColumn.column,
+            QueryParameter(
+              when (operator) {
+                ComparisonOperator.STARTS_WITH -> "$escapedValue%"
+                ComparisonOperator.ENDS_WITH -> "%$escapedValue"
+                ComparisonOperator.CONTAINS -> "%$escapedValue%"
+                else -> throw IllegalStateException()
+              },
+              accessibleColumn.column.columnType
+            ),
+            true, null
+          )
+        }
+      }
+    }
+
+    // TODO: Implement REGEX_MATCHER
+
     var operand: Expression<*> = accessibleColumn.column
     val value: Expression<*>?
 
-    // NOTE: Longs should be able to operate on string columns by accessing their length
+    // Longs should be able to operate on string columns by accessing their length
     if (
       terminalValue is LongExpression &&
       accessibleColumn.column.columnType is StringColumnType
@@ -106,17 +161,11 @@ class FilterRequestApplicator(
     return when (operator) {
       ComparisonOperator.EQUAL -> EqOp(operand, value)
       ComparisonOperator.NOT_EQUAL -> NeqOp(operand, value)
-      ComparisonOperator.REGEX_MATCHER -> throw DescribedInternalException("The regex operator is not (yet) supported")
-      ComparisonOperator.CONTAINS_EXACT -> {
-        // TODO: Implement these missing operations
-        throw DescribedInternalException("The contains exact operator is not (yet) supported")
-//        LikeEscapeOp(column, stringParam(""), true, '%')
-      }
-      ComparisonOperator.CONTAINS_FUZZY -> throw DescribedInternalException("The contains fuzzy operator is not (yet) supported")
       ComparisonOperator.GREATER_THAN -> GreaterOp(operand, value)
       ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(operand, value)
       ComparisonOperator.LESS_THAN -> LessOp(operand, value)
       ComparisonOperator.LESS_THAN_OR_EQUAL -> LessEqOp(operand, value)
+      else -> throw DescribedException.fromDescription("The operator $operator is not (yet) supported")
     }
   }
 
