@@ -38,7 +38,6 @@ class FilterRequestApplicator(
         accessibleColumn.valueToExpression(terminal.value)
       }
       is StringExpression -> {
-        // TODO: (Idea) would it be possible to somehow encode invoking LOWERCASE, UPPERCASE and TRIM?
         if (accessibleColumn.dataType != ExpressionDataType.STRING)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.STRING, accessibleColumn.dataType)
 
