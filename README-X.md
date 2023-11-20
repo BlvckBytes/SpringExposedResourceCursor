@@ -70,10 +70,18 @@ WHERE column != value
 ```
 
 ```sql
-WHERE REGEXP_LIKE(<column>, <value>, 'c')
+WHERE REGEXP_LIKE(<column>, <value>, 'i')
 ```
 
-As the `c` denotes, regular expressions are always matched case sensitively.
+### REGEX_MATCHER_SENSITIVE
+
+```
+<column> ?? <value>
+```
+
+```sql
+WHERE REGEXP_LIKE(<column>, <value>, 'c')
+```
 
 ### STARTS_WITH
 

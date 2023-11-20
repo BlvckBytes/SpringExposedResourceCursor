@@ -9,6 +9,7 @@ This project's aim is to completely take care of standardized resource cursors. 
   - [NOT_EQUAL](#not_equal)
   - [NOT_EQUAL_SENSITIVE](#not_equal_sensitive)
   - [REGEX_MATCHER](#regex_matcher)
+  - [REGEX_MATCHER_SENSITIVE](#regex_matcher_sensitive)
   - [STARTS_WITH](#starts_with)
   - [ENDS_WITH](#ends_with)
   - [CONTAINS](#contains)
@@ -87,10 +88,18 @@ WHERE column != value
 ```
 
 ```sql
-WHERE REGEXP_LIKE(<column>, <value>, 'c')
+WHERE REGEXP_LIKE(<column>, <value>, 'i')
 ```
 
-As the `c` denotes, regular expressions are always matched case sensitively.
+### REGEX_MATCHER_SENSITIVE
+
+```
+<column> ?? <value>
+```
+
+```sql
+WHERE REGEXP_LIKE(<column>, <value>, 'c')
+```
 
 ### STARTS_WITH
 

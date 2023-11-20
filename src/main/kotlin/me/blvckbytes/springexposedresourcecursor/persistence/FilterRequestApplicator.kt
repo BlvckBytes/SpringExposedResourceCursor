@@ -78,7 +78,8 @@ class FilterRequestApplicator(
       operator == ComparisonOperator.CONTAINS_FUZZY ||
       operator == ComparisonOperator.STARTS_WITH ||
       operator == ComparisonOperator.ENDS_WITH ||
-      operator == ComparisonOperator.REGEX_MATCHER
+      operator == ComparisonOperator.REGEX_MATCHER ||
+      operator == ComparisonOperator.REGEX_MATCHER_SENSITIVE
     ) {
       if (terminalValue !is StringExpression)
         throw DescribedException.fromDescription("The filter operator $operator only works with string values")
@@ -96,12 +97,13 @@ class FilterRequestApplicator(
             )
           }
         )
-        ComparisonOperator.REGEX_MATCHER -> (
+        ComparisonOperator.REGEX_MATCHER,
+        ComparisonOperator.REGEX_MATCHER_SENSITIVE -> (
           @Suppress("UNCHECKED_CAST")
           RegexpOp(
             accessibleColumn.column as Column<String>,
             QueryParameter(terminalValue.value, accessibleColumn.column.columnType),
-            true
+            operator == ComparisonOperator.REGEX_MATCHER_SENSITIVE
           )
         )
         else -> {
