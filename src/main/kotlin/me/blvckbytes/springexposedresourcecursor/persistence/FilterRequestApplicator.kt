@@ -41,7 +41,12 @@ class FilterRequestApplicator(
         if (accessibleColumn.dataType != ExpressionDataType.STRING)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.STRING, accessibleColumn.dataType)
 
-        accessibleColumn.valueToExpression(terminal.value)
+        var value = terminal.value
+
+        if (!terminal.isCaseSensitive)
+          value = value.lowercase()
+
+        accessibleColumn.valueToExpression(value)
       }
       is LiteralExpression -> when (terminal.value!!) {
         LiteralType.NULL -> null
@@ -71,15 +76,28 @@ class FilterRequestApplicator(
       .replace("_", "\\_")
   }
 
+  @Suppress("UNCHECKED_CAST")
   private fun instantiateOperator(accessibleColumn: UserAccessibleColumn, operator: ComparisonOperator, terminalValue: TerminalExpression<*>): Op<Boolean> {
+    var operand: Expression<*> = accessibleColumn.column
+
+    if (
+      terminalValue is StringExpression &&
+      accessibleColumn.column.columnType is StringColumnType
+    ) {
+      if (!terminalValue.isCaseSensitive)
+        operand = LowerCase(operand as Expression<String>)
+
+      if (terminalValue.shouldTrimTarget())
+        operand = Trim(operand as Expression<String>)
+    }
+
     // These operators all operate only on string terminal values and string columns
     if (
       operator == ComparisonOperator.CONTAINS ||
       operator == ComparisonOperator.CONTAINS_FUZZY ||
       operator == ComparisonOperator.STARTS_WITH ||
       operator == ComparisonOperator.ENDS_WITH ||
-      operator == ComparisonOperator.REGEX_MATCHER ||
-      operator == ComparisonOperator.REGEX_MATCHER_SENSITIVE
+      operator == ComparisonOperator.REGEX_MATCHER
     ) {
       if (terminalValue !is StringExpression)
         throw DescribedException.fromDescription("The filter operator $operator only works with string values")
@@ -87,29 +105,33 @@ class FilterRequestApplicator(
       if (accessibleColumn.column.columnType !is StringColumnType)
         throw DescribedException.fromDescription("The filter operator $operator only works on string columns")
 
+      var terminalStringValue = terminalValue.value
+
+      if (!terminalValue.isCaseSensitive)
+        terminalStringValue = terminalStringValue.lowercase()
+
       return when (operator) {
         ComparisonOperator.CONTAINS_FUZZY -> AndOp(
-          terminalValue.value.split(" ").map {
+          terminalStringValue.split(" ").map {
             LikeEscapeOp(
-              accessibleColumn.column,
+              operand,
               QueryParameter("%${escapeLikeValue(it)}%", accessibleColumn.column.columnType),
               true, null
             )
           }
         )
-        ComparisonOperator.REGEX_MATCHER,
-        ComparisonOperator.REGEX_MATCHER_SENSITIVE -> (
+        ComparisonOperator.REGEX_MATCHER -> (
           @Suppress("UNCHECKED_CAST")
           RegexpOp(
-            accessibleColumn.column as Column<String>,
-            QueryParameter(terminalValue.value, accessibleColumn.column.columnType),
-            operator == ComparisonOperator.REGEX_MATCHER_SENSITIVE
+            operand as Expression<String>,
+            QueryParameter(terminalStringValue, accessibleColumn.column.columnType),
+            true
           )
         )
         else -> {
-          val escapedValue = escapeLikeValue(terminalValue.value)
+          val escapedValue = escapeLikeValue(terminalStringValue)
           LikeEscapeOp(
-            accessibleColumn.column,
+            operand,
             QueryParameter(
               when (operator) {
                 ComparisonOperator.STARTS_WITH -> "$escapedValue%"
@@ -125,7 +147,6 @@ class FilterRequestApplicator(
       }
     }
 
-    var operand: Expression<*> = accessibleColumn.column
     var value: Expression<*>?
 
     // Longs should be able to operate on string columns by accessing their length
@@ -133,7 +154,6 @@ class FilterRequestApplicator(
       terminalValue is LongExpression &&
       accessibleColumn.column.columnType is StringColumnType
     ) {
-      @Suppress("UNCHECKED_CAST")
       operand = CharLength(accessibleColumn.column as Column<String>)
       value = QueryParameter(terminalValue.value, LongColumnType())
     }
@@ -151,7 +171,6 @@ class FilterRequestApplicator(
       throw UnsupportedOperatorException(null, operator, listOf(ComparisonOperator.EQUAL, ComparisonOperator.NOT_EQUAL))
     }
 
-    @Suppress("UNCHECKED_CAST")
     if (
       accessibleColumn.column.columnType is StringColumnType &&
       terminalValue is StringExpression &&
@@ -162,10 +181,8 @@ class FilterRequestApplicator(
     }
 
     return when (operator) {
-      ComparisonOperator.EQUAL,
-      ComparisonOperator.EQUAL_SENSITIVE -> EqOp(operand, value)
-      ComparisonOperator.NOT_EQUAL,
-      ComparisonOperator.NOT_EQUAL_SENSITIVE -> NeqOp(operand, value)
+      ComparisonOperator.EQUAL -> EqOp(operand, value)
+      ComparisonOperator.NOT_EQUAL -> NeqOp(operand, value)
       ComparisonOperator.GREATER_THAN -> GreaterOp(operand, value)
       ComparisonOperator.GREATER_THAN_OR_EQUAL -> GreaterEqOp(operand, value)
       ComparisonOperator.LESS_THAN -> LessOp(operand, value)

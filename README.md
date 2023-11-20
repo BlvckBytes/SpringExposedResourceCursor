@@ -4,12 +4,10 @@ This project's aim is to completely take care of standardized resource cursors. 
 
 ## Table of Contents
 - [Filtering](#filtering)
+  - [String Literal Flags](#string-literal-flags)
   - [EQUAL](#equal)
-  - [EQUAL_SENSITIVE](#equal_sensitive)
   - [NOT_EQUAL](#not_equal)
-  - [NOT_EQUAL_SENSITIVE](#not_equal_sensitive)
   - [REGEX_MATCHER](#regex_matcher)
-  - [REGEX_MATCHER_SENSITIVE](#regex_matcher_sensitive)
   - [STARTS_WITH](#starts_with)
   - [ENDS_WITH](#ends_with)
   - [CONTAINS](#contains)
@@ -33,7 +31,11 @@ In general, terminal values and columns need to have the same type to be compara
 - Double terminals can compare with all decimal number column types
 - A long terminal used on a column of any string type will compare against it's **length**
 
-The difference between sensitive and non-sensitive operators is automatic trimming and case invariance when comparing, which of course only works if the collation of the column operated on is case- and optionally accent-sensitive in the first place. Personally, I use `utf8mb4_0900_as_cs` for this exact reason.
+The difference between sensitive and non-sensitive strings is automatic trimming and case invariance when comparing, which of course only works if the collation of the column operated on is case- and optionally accent-sensitive in the first place. Personally, I use `utf8mb4_0900_as_cs` for this exact reason.
+
+### String Literal Flags
+
+If a string literal is flagged to be compared case-insensitively, the `LOWER()`-function is applied to both sides of the SQL-expression before the comparison. Likewise, when a string literal is flagged to trim it's target-value, the `TRIM()`-function is being applied to the target column before comparing.
 
 ### EQUAL
 
@@ -42,7 +44,7 @@ The difference between sensitive and non-sensitive operators is automatic trimmi
 ```
 
 ```sql
-WHERE TRIM(LOWER(column)) = TRIM(LOWER(value))
+WHERE column = value
 ```
 
 When `<column>` is a string column and `<value>` is a long, the following expression will be generated (this also applies for other numeric operators, but is only shown once):
@@ -51,30 +53,10 @@ When `<column>` is a string column and `<value>` is a long, the following expres
 WHERE CHAR_LENGTH(column) = value
 ```
 
-### EQUAL_SENSITIVE
-
-```
-<column> === <value>
-```
-
-```sql
-WHERE column = value
-```
-
 ### NOT_EQUAL
 
 ```
 <column> != <value>
-```
-
-```sql
-WHERE TRIM(LOWER(column)) != TRIM(LOWER(value))
-```
-
-### NOT_EQUAL_SENSITIVE
-
-```
-<column> !== <value>
 ```
 
 ```sql
@@ -85,16 +67,6 @@ WHERE column != value
 
 ```
 <column> ? <value>
-```
-
-```sql
-WHERE REGEXP_LIKE(<column>, <value>, 'i')
-```
-
-### REGEX_MATCHER_SENSITIVE
-
-```
-<column> ?? <value>
 ```
 
 ```sql
