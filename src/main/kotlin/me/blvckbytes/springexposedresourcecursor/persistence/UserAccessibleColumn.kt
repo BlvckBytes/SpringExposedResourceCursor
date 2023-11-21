@@ -1,10 +1,14 @@
 package me.blvckbytes.springexposedresourcecursor.persistence
 
+import me.blvckbytes.springexposedresourcecursor.domain.exception.InvalidDateTimeException
 import me.blvckbytes.springexposedresourcecursor.domain.exception.InvalidUUIDException
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.javatime.JavaLocalDateTimeColumnType
+import java.time.LocalDateTime
+import java.time.format.DateTimeParseException
 import java.util.*
 import kotlin.reflect.KClass
 
@@ -136,6 +140,10 @@ class UserAccessibleColumn(
         ensureCorrectValueType(ExpressionDataType.STRING, it)
         QueryParameter(parseUUID(key, it as String), columnType)
       }
+      is JavaLocalDateTimeColumnType -> Pair(ExpressionDataType.STRING) {
+        ensureCorrectValueType(ExpressionDataType.STRING, it)
+        QueryParameter(parseLocalDateTime(key, it as String), columnType)
+      }
       is StringColumnType,
       is CharacterColumnType -> Pair(ExpressionDataType.STRING) {
         ensureCorrectValueType(ExpressionDataType.STRING, it)
@@ -167,6 +175,14 @@ class UserAccessibleColumn(
     // corresponding applicator has to check beforehand and throw a proper type mismatch exception
     if (!type.isInstance(value))
       throw IllegalStateException("Required type $dataType but found ${value.javaClass.simpleName}")
+  }
+
+  private fun parseLocalDateTime(columnName: String, input: String): LocalDateTime {
+    try {
+      return LocalDateTime.parse(input)
+    } catch (exception: DateTimeParseException) {
+      throw InvalidDateTimeException(input, columnName)
+    }
   }
 
   private fun parseUUID(columnName: String, input: String): UUID {
