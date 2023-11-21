@@ -250,10 +250,11 @@ private val resourceCursorService: RequestResourceCursorService
 fun getBaseTags(
   @Valid requestResourceCursorData: RequestResourceCursorDto
 ): MemberCompressedListResponseDto {
-  return MemberCompressedListResponseDto.fromListResponse(
+  return MemberCompressedListResponseDto.fromListResponseWithOneReferenced(
     baseTagPersistence.listBaseTags(
       resourceCursorService.parseCursorFromDto(requestResourceCursorData)
     ),
+    "tagGroups",
     BaseTagRDto::fromModel,
   ) { item, map ->
     if (item.tagGroup != null)
