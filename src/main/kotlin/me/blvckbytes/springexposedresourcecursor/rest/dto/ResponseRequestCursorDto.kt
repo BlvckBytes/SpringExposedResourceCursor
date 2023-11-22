@@ -1,11 +1,13 @@
 package me.blvckbytes.springexposedresourcecursor.rest.dto
 
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
+import me.blvckbytes.springexposedresourcecursor.domain.ResponseResourceCursor
 import me.blvckbytes.springexposedresourcecursor.domain.SortingOrder
 
 class ResponseRequestCursorDto(
   val selectedPage: Int,
   val pageSize: Int,
+  val totalItems: Long,
   val sorting: String?,
   val filtering: String?,
 ) {
@@ -19,10 +21,11 @@ class ResponseRequestCursorDto(
       }
     }
 
-    fun fromRequestCursor(resourceCursor: RequestResourceCursor): ResponseRequestCursorDto {
+    fun fromRequestCursor(resourceCursor: ResponseResourceCursor): ResponseRequestCursorDto {
       return ResponseRequestCursorDto(
         resourceCursor.selectedPage,
         resourceCursor.pageSize,
+        resourceCursor.totalItems,
         stringifySorting(resourceCursor),
         resourceCursor.filtering?.expressionify()
       )

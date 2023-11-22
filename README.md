@@ -226,15 +226,12 @@ This applicator can now be used on the query. Also, this time, a proper [ListRes
 ```kotlin
 fun listBaseTags(resourceCursor: RequestResourceCursor): ListResponse<BaseTag> {
   return transaction {
-    ListResponse(
-      cursorApplicator.apply(
-        resourceCursor,
-        BaseTagTable
-          .leftJoin(TagGroupTable, { tagGroupId }, { id })
-          .selectAll()
-      )
-      .map(this@BaseTagPersistenceAdapter::mapBaseTag),
-      resourceCursor
+    cursorApplicator.applyAndMakeResponse(
+      resourceCursor,
+      BaseTagTable
+        .leftJoin(TagGroupTable, { tagGroupId }, { id })
+        .selectAll(),
+      this@BaseTagPersistenceAdapter::mapBaseTag
     )
   }
 }

@@ -1,7 +1,10 @@
 package me.blvckbytes.springexposedresourcecursor.persistence
 
+import me.blvckbytes.springexposedresourcecursor.domain.ListResponse
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
+import me.blvckbytes.springexposedresourcecursor.domain.ResponseResourceCursor
 import org.jetbrains.exposed.sql.Query
+import org.jetbrains.exposed.sql.ResultRow
 
 class ResourceCursorApplicator(
   private val displayName: String,
@@ -21,18 +24,23 @@ class ResourceCursorApplicator(
     sortApplicator = SortRequestApplicator(displayName, columns)
   }
 
-  fun apply(resourceCursor: RequestResourceCursor, query: Query): Query {
+  fun <DomainModel> applyAndMakeResponse(
+    resourceCursor: RequestResourceCursor,
+    query: Query,
+    mapper: (resultRow: ResultRow) -> DomainModel
+  ): ListResponse<DomainModel> where DomainModel : Any {
     filterApplicator.apply(resourceCursor, query)
     sortApplicator.apply(resourceCursor, query)
 
     if (resourceCursor.selectedPage < 1)
       throw IllegalStateException("The selected page variable mustn't be less than and starts at one")
 
-    query.limit(
-      resourceCursor.pageSize,
-      (resourceCursor.selectedPage - 1) * resourceCursor.pageSize.toLong()
-    )
+    val totalItems = query.count()
 
-    return query
+    val items = query
+      .limit(resourceCursor.pageSize, (resourceCursor.selectedPage - 1) * resourceCursor.pageSize.toLong())
+      .map(mapper)
+
+    return ListResponse(items, ResponseResourceCursor.fromRequestCursor(resourceCursor, totalItems))
   }
 }
