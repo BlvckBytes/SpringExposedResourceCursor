@@ -4,6 +4,11 @@ import me.blvckbytes.filterexpressionparser.error.AParserError
 import me.blvckbytes.filterexpressionparser.parser.FilterExpressionParser
 import me.blvckbytes.filterexpressionparser.parser.expression.ABinaryFilterExpression
 import me.blvckbytes.filterexpressionparser.tokenizer.FilterExpressionTokenizer
+import me.blvckbytes.springcommon.exception.PropertyValidationException
+import me.blvckbytes.springcommon.validation.CompareToConstant
+import me.blvckbytes.springcommon.validation.CompareToMinMax
+import me.blvckbytes.springcommon.validation.Comparison
+import me.blvckbytes.springcommon.validation.NullOrNotBlank
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
 import me.blvckbytes.springexposedresourcecursor.domain.SortingOrder
 import me.blvckbytes.springexposedresourcecursor.domain.exception.FilterExpressionParserException
@@ -18,8 +23,12 @@ import java.util.logging.Logger
 class RequestResourceCursorService(
   @Value("\${resource-cursor.default-page-size}")
   private val pageSizeDefault: Int,
+  @Value("\${resource-cursor.min-page-size}")
+  private val minPageSize: Int,
+  @Value("\${resource-cursor.max-page-size}")
+  private val maxPageSize: Int,
   @Value("\${resource-cursor.default-sorting:#{null}}")
-  private val defaultSorting: String?
+  private val defaultSorting: String?,
 ) {
 
   // TODO: This seems to not be the right way of obtaining a logger...
@@ -33,6 +42,13 @@ class RequestResourceCursorService(
   }
 
   fun parseCursorFromDto(cursorDto: RequestResourceCursorDto): RequestResourceCursor {
+    PropertyValidationException()
+      .addResult(CompareToConstant.validate(RequestResourceCursorDto::selectedPage, cursorDto.selectedPage, 1, Comparison.GREATER_THAN_OR_EQUALS))
+      .addResult(CompareToMinMax.validate(RequestResourceCursorDto::pageSize, cursorDto.pageSize, minPageSize, maxPageSize))
+      .addResult(NullOrNotBlank.validate(RequestResourceCursorDto::sorting, cursorDto.sorting))
+      .addResult(NullOrNotBlank.validate(RequestResourceCursorDto::filtering, cursorDto.filtering))
+      .throwIfApplicable()
+
     return RequestResourceCursor(
       cursorDto.selectedPage ?: 1,
       cursorDto.pageSize ?: pageSizeDefault,
