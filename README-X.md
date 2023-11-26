@@ -186,7 +186,7 @@ BaseTagTable
   .selectAll()
 ```
 
-The result needs to be mapped to their respective domain model instances and later on to appropriate `DTO`s, which is again too trivial to address here. One note I do want to make is that on lists like these, were the same `TagGroupTable` may be referenced multiple times by the `BaseTagTable`, it is of value to "compress" the response by not inlining these relationships into the `DTO` for the `BaseTag`, but rather to only have a `baseTagId` on it and then respond with a separate, `id`-unique list of `TagGroup` entries, as the client can easily join them on their side. The [MemberCompressedListResponseDto](src/main/kotlin/me/blvckbytes/springexposedresourcecursor/rest/dto/MemberCompressedListResponseDto.kt) has been introduced for this exact purpose.
+The result needs to be mapped to their respective domain model instances and later on to appropriate `DTO`s, which is again too trivial to address here. One note I do want to make is that on lists like these, were the same `TagGroupTable` may be referenced multiple times by the `BaseTagTable`, it is of value to "compress" the response by not inlining these relationships into the `DTO` for the `BaseTag`, but rather to only have a `baseTagId` on it and then respond with a separate, `id`-unique list of `TagGroup` entries, as the client can easily join them on their side. The [OneMemberListResponseDto](src/main/kotlin/me/blvckbytes/springexposedresourcecursor/rest/dto/OneMemberListResponseDto.kt) has been introduced for this exact purpose. For two members, use [TwoMemberListResponseDto](src/main/kotlin/me/blvckbytes/springexposedresourcecursor/rest/dto/TwoMemberListResponseDto.kt).
 
 At this point, having fully capable filtering, sorting as well as pagination is only a few steps away. First, the library needs to know which fields are available to operate on. To keep this definition concise, the [AccessibleColumnListBuilder](src/main/kotlin/me/blvckbytes/springexposedresourcecursor/persistence/AccessibleColumnListBuilder.kt) is a great utility to make use of. The [ResourceCursorApplicator](src/main/kotlin/me/blvckbytes/springexposedresourcecursor/persistence/ResourceCursorApplicator.kt) makes it easy to apply a [RequestResourceCursor](src/main/kotlin/me/blvckbytes/springexposedresourcecursor/domain/RequestResourceCursor.kt) to a `Query`, as returned by `Exposed`.
 
@@ -230,16 +230,15 @@ private val resourceCursorService: RequestResourceCursorService
 @GetMapping
 fun getBaseTags(
   @Valid requestResourceCursorData: RequestResourceCursorDto
-): MemberCompressedListResponseDto {
-  return MemberCompressedListResponseDto.fromListResponseWithOneReferenced(
+): OneMemberListResponseDto<BaseTagRDto, TagGroupRDto> {
+  return OneMemberListResponseDto.fromListResponse(
     baseTagPersistence.listBaseTags(
       resourceCursorService.parseCursorFromDto(requestResourceCursorData)
     ),
-    "tagGroups",
     BaseTagRDto::fromModel,
   ) { item, map ->
     if (item.tagGroup != null)
-      map[item.tagGroup!!.id] = TagGroupDto.fromModel(item.tagGroup!!)
+      map[item.tagGroup!!.id] = TagGroupRDto.fromModel(item.tagGroup!!)
   }
 }
 ```
