@@ -22,6 +22,26 @@ class AccessibleColumnListBuilder {
     return this
   }
 
+  fun with(column: Column<*>): AccessibleColumnListBuilder {
+    if (columns.containsKey(column))
+      throw IllegalStateException("Encountered duplicate column: ${column.name}")
+
+    this.columns[column] = null
+    return this
+  }
+
+  fun extendFrom(columns: List<UserAccessibleColumn>): AccessibleColumnListBuilder {
+    for (column in columns) {
+
+      if (this.columns.containsKey(column.column))
+        throw IllegalStateException("Encountered duplicate column while extending using extendFrom(): ${column.column.name}")
+
+      this.columns[column.column] = column.key
+    }
+
+    return this
+  }
+
   fun withCustomNamed(column: Column<*>, customName: String): AccessibleColumnListBuilder {
     val existingName = columns[column]
 
