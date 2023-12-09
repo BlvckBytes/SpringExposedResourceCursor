@@ -158,6 +158,25 @@ class FilterRequestApplicator(
       value = QueryParameter(terminalValue.value, LongColumnType())
     }
 
+    // Strings should be able to access enum columns by first looking up the enum constant
+    else if (
+      terminalValue is StringExpression &&
+      accessibleColumn.column.columnType is PersistentEnumerationColumnType<*>
+    ) {
+      val enumColumn = accessibleColumn.column.columnType as PersistentEnumerationColumnType<*>
+
+      val terminalStringValue = terminalValue.value
+      value = QueryParameter(
+        enumColumn.getIntegerValueFromName(terminalStringValue)
+          ?: throw DescribedException.fromDescription(
+            "Could not convert $terminalStringValue into a ${enumColumn.type.java.simpleName ?: "?"}${
+              enumColumn.getNames().joinToString(", ", " enum (", ")")
+            } for filtering column '${accessibleColumn.key}'"
+          ),
+        IntegerColumnType()
+      )
+    }
+
     else
       value = terminalExpressionToExposedExpression(accessibleColumn, terminalValue)
 

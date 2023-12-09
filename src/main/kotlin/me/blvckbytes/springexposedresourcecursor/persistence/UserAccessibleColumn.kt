@@ -145,7 +145,8 @@ class UserAccessibleColumn(
         QueryParameter(parseLocalDateTime(key, it as String), columnType)
       }
       is StringColumnType,
-      is CharacterColumnType -> Pair(ExpressionDataType.STRING) {
+      is CharacterColumnType,
+      is PersistentEnumerationColumnType<*> -> Pair(ExpressionDataType.STRING) {
         ensureCorrectValueType(ExpressionDataType.STRING, it)
         QueryParameter(it, columnType)
       }
