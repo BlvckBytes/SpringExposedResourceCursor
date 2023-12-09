@@ -159,6 +159,9 @@ class FilterRequestApplicator(
     }
 
     // Strings should be able to access enum columns by first looking up the enum constant
+    // TODO: Actually, it would be great if *all* operators worked on enum columns, as the server knows about all
+    //       enum constants can can dispatch operators locally to just yield matching integers (or-joined).
+    //       This will truly make it look and feel like a real string column.
     else if (
       terminalValue is StringExpression &&
       accessibleColumn.column.columnType is PersistentEnumerationColumnType<*>
