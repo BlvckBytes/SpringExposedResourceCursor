@@ -4,11 +4,9 @@ import me.blvckbytes.filterexpressionparser.error.AParserError
 import me.blvckbytes.filterexpressionparser.parser.FilterExpressionParser
 import me.blvckbytes.filterexpressionparser.parser.expression.ABinaryFilterExpression
 import me.blvckbytes.filterexpressionparser.tokenizer.FilterExpressionTokenizer
-import me.blvckbytes.springcommon.exception.PropertyValidationException
-import me.blvckbytes.springcommon.validation.CompareToConstant
-import me.blvckbytes.springcommon.validation.CompareToMinMax
-import me.blvckbytes.springcommon.validation.Comparison
-import me.blvckbytes.springcommon.validation.NullOrNotBlank
+import me.blvckbytes.propertyvalidation.ValidationBuilder
+import me.blvckbytes.propertyvalidation.validatior.*
+import me.blvckbytes.propertyvalidation.validatior.Comparison
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
 import me.blvckbytes.springexposedresourcecursor.domain.SortingOrder
 import me.blvckbytes.springexposedresourcecursor.domain.exception.FilterExpressionParserException
@@ -18,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.util.*
 import java.util.logging.Logger
+import kotlin.collections.LinkedHashMap
 
 @Component
 class RequestResourceCursorService(
@@ -35,18 +34,18 @@ class RequestResourceCursorService(
   private val logger = Logger.getGlobal()
 
   private val parser = FilterExpressionParser(logger)
-  private val preParsedDefaultSorting: TreeMap<String, SortingOrder>?
+  private val preParsedDefaultSorting: LinkedHashMap<String, SortingOrder>?
 
   init {
     preParsedDefaultSorting = if (defaultSorting == null) null else parseSorting(defaultSorting)
   }
 
   fun parseCursorFromDto(cursorDto: RequestResourceCursorDto): RequestResourceCursor {
-    PropertyValidationException()
-      .addResult(CompareToConstant.validate(RequestResourceCursorDto::selectedPage, cursorDto.selectedPage, 1, Comparison.GREATER_THAN_OR_EQUALS))
-      .addResult(CompareToMinMax.validate(RequestResourceCursorDto::pageSize, cursorDto.pageSize, minPageSize, maxPageSize))
-      .addResult(NullOrNotBlank.validate(RequestResourceCursorDto::sorting, cursorDto.sorting))
-      .addResult(NullOrNotBlank.validate(RequestResourceCursorDto::filtering, cursorDto.filtering))
+    ValidationBuilder()
+      .addValidator(CompareToConstant(RequestResourceCursorDto::selectedPage, cursorDto.selectedPage, 1, Comparison.GREATER_THAN_OR_EQUALS))
+      .addValidator(CompareToMinMax(RequestResourceCursorDto::pageSize, cursorDto.pageSize, minPageSize, maxPageSize))
+      .addValidator(NullOrNotBlank(RequestResourceCursorDto::sorting, cursorDto.sorting))
+      .addValidator(NullOrNotBlank(RequestResourceCursorDto::filtering, cursorDto.filtering))
       .throwIfApplicable()
 
     return RequestResourceCursor(
@@ -65,8 +64,8 @@ class RequestResourceCursorService(
     }
   }
 
-  private fun parseSorting(sortingString: String): TreeMap<String, SortingOrder>? {
-    val sorting: TreeMap<String, SortingOrder> = TreeMap()
+  private fun parseSorting(sortingString: String): LinkedHashMap<String, SortingOrder>? {
+    val sorting = LinkedHashMap<String, SortingOrder>()
     val sortingItems = sortingString.split(",")
 
     for (sortingItem in sortingItems) {

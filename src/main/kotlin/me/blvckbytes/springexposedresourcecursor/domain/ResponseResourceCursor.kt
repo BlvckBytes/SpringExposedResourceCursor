@@ -1,12 +1,11 @@
 package me.blvckbytes.springexposedresourcecursor.domain
 
 import me.blvckbytes.filterexpressionparser.parser.expression.ABinaryFilterExpression
-import java.util.TreeMap
 
 open class ResponseResourceCursor(
   selectedPage: Int,
   pageSize: Int,
-  sorting: TreeMap<String, SortingOrder>?,
+  sorting: LinkedHashMap<String, SortingOrder>?,
   filtering: ABinaryFilterExpression<*, *>?,
   val totalItems: Long,
 ) : RequestResourceCursor(selectedPage, pageSize, sorting, filtering) {
