@@ -44,12 +44,7 @@ class FilterRequestApplicator(
         if (accessibleColumn.dataType != ExpressionDataType.STRING)
           throw PropertyDataTypeMismatchException(accessibleColumn.key, displayName, ExpressionDataType.STRING, accessibleColumn.dataType)
 
-        var value = terminal.value
-
-        if (!terminal.isCaseSensitive)
-          value = value.lowercase()
-
-        accessibleColumn.valueToExpression(value)
+        accessibleColumn.valueToExpression(terminal.value)
       }
       is LiteralExpression -> when (terminal.value!!) {
         LiteralType.NULL -> null
@@ -87,9 +82,6 @@ class FilterRequestApplicator(
       terminalValue is StringExpression &&
       accessibleColumn.column.columnType is StringColumnType
     ) {
-      if (!terminalValue.isCaseSensitive)
-        operand = LowerCase(operand as Expression<String>)
-
       if (terminalValue.shouldTrimTarget())
         operand = Trim(operand as Expression<String>)
     }
@@ -108,14 +100,9 @@ class FilterRequestApplicator(
       if (accessibleColumn.column.columnType !is StringColumnType)
         throw DescribedException.fromDescription("The filter operator $operator only works on string columns")
 
-      var terminalStringValue = terminalValue.value
-
-      if (!terminalValue.isCaseSensitive)
-        terminalStringValue = terminalStringValue.lowercase()
-
       return when (operator) {
         ComparisonOperator.CONTAINS_FUZZY -> AndOp(
-          terminalStringValue.split(" ").map {
+          terminalValue.value.split(" ").map {
             LikeEscapeOp(
               operand,
               QueryParameter("%${escapeLikeValue(it)}%", accessibleColumn.column.columnType),
@@ -134,12 +121,12 @@ class FilterRequestApplicator(
           @Suppress("UNCHECKED_CAST")
           RegexpOp(
             operand as Expression<String>,
-            QueryParameter(terminalStringValue, accessibleColumn.column.columnType),
-            true
+            QueryParameter(terminalValue.value, accessibleColumn.column.columnType),
+            terminalValue.isCaseSensitive
           )
         }
         else -> {
-          val escapedValue = escapeLikeValue(terminalStringValue)
+          val escapedValue = escapeLikeValue(terminalValue.value)
           LikeEscapeOp(
             operand,
             QueryParameter(
@@ -157,7 +144,7 @@ class FilterRequestApplicator(
       }
     }
 
-    var value: Expression<*>?
+    val value: Expression<*>?
 
     // Longs should be able to operate on string columns by accessing their length
     if (
@@ -203,15 +190,6 @@ class FilterRequestApplicator(
       throw UnsupportedOperatorException(null, operator, listOf(ComparisonOperator.EQUAL, ComparisonOperator.NOT_EQUAL))
     }
 
-    if (
-      accessibleColumn.column.columnType is StringColumnType &&
-      terminalValue is StringExpression &&
-      (operator == ComparisonOperator.EQUAL || operator == ComparisonOperator.NOT_EQUAL)
-    ) {
-      operand = Trim(LowerCase(operand as Expression<String>))
-      value = Trim(LowerCase(value as Expression<String>))
-    }
-
     return when (operator) {
       ComparisonOperator.EQUAL -> EqOp(operand, value)
       ComparisonOperator.NOT_EQUAL -> NeqOp(operand, value)
@@ -226,7 +204,20 @@ class FilterRequestApplicator(
   private fun filterExpressionToOperator(expression: AExpression): Op<Boolean> {
     if (expression is ComparisonExpression) {
       val column = resolveColumn(expression.lhs.value)
-      return instantiateOperator(column, expression.operator, expression.rhs)
+      val rhs = expression.rhs
+
+      val operator = instantiateOperator(column, expression.operator, rhs)
+
+      if (rhs is StringExpression && rhs.isCaseSensitive) {
+        return object : Op<Boolean>() {
+          override fun toQueryBuilder(queryBuilder: QueryBuilder) {
+            queryBuilder.append(operator)
+            queryBuilder.append(" COLLATE utf8mb4_0900_as_cs")
+          }
+        }
+      }
+
+      return operator
     }
 
     if (expression is ConjunctionExpression) {
