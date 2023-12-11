@@ -19,7 +19,7 @@ The difference between sensitive and non-sensitive strings is automatic trimming
 
 ### String Literal Flags
 
-If a string literal is flagged to be compared case-insensitively, the `LOWER()`-function is applied to both sides of the SQL-expression before the comparison. Likewise, when a string literal is flagged to trim it's target-value, the `TRIM()`-function is being applied to the target column before comparing.
+If a string literal is flagged to be compared case-sensitively, the `COLLATE`-keyword is appended to the resulting operator, so that collation is sensitive on the target column. When a string literal is flagged to trim it's target-value, the `TRIM()`-function is being applied to the target column before comparing.
 
 ### EQUAL
 
