@@ -6,10 +6,13 @@ import me.blvckbytes.filterexpressionparser.parser.expression.*
 import me.blvckbytes.springcommon.exception.DescribedException
 import me.blvckbytes.springcommon.exception.DescribedInternalException
 import me.blvckbytes.springexposedresourcecursor.domain.RequestResourceCursor
+import me.blvckbytes.springexposedresourcecursor.domain.exception.MalformedRegexException
 import me.blvckbytes.springexposedresourcecursor.domain.exception.PropertyDataTypeMismatchException
 import me.blvckbytes.springexposedresourcecursor.domain.exception.UnsupportedOperatorException
 import me.blvckbytes.springexposedresourcecursor.domain.exception.UnsupportedPropertyException
 import org.jetbrains.exposed.sql.*
+import java.util.regex.Pattern
+import java.util.regex.PatternSyntaxException
 
 class FilterRequestApplicator(
   private val displayName: String,
@@ -120,14 +123,21 @@ class FilterRequestApplicator(
             )
           }
         )
-        ComparisonOperator.REGEX_MATCHER -> (
+        ComparisonOperator.REGEX_MATCHER -> {
+          try {
+            // Otherwise, an SQLException is thrown, if the database encounters a malformed regular expression
+            Pattern.compile(terminalValue.value)
+          } catch (exception: PatternSyntaxException) {
+            throw MalformedRegexException(accessibleColumn, terminalValue.value)
+          }
+
           @Suppress("UNCHECKED_CAST")
           RegexpOp(
             operand as Expression<String>,
             QueryParameter(terminalStringValue, accessibleColumn.column.columnType),
             true
           )
-        )
+        }
         else -> {
           val escapedValue = escapeLikeValue(terminalStringValue)
           LikeEscapeOp(
